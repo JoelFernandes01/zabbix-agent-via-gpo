@@ -1,0 +1,55 @@
+Olá, RedeIn! 🚀
+
+Gostaria de compartilhar mais um projeto que finalizei recentemente e que pode ser útil para quem trabalha com monitoramento e automação em ambientes Windows. A ideia deste post é trocar experiências técnicas e fortalecer nosso networking!
+
+📌 O desafio: Automatizar a instalação do Zabbix Agent em todo o nosso parque de operações (Windows 10 e Windows 11) e garantir que cada máquina fosse registrada automaticamente no Zabbix Server, sem necessidade de intervenção manual.
+
+✅ A solução:
+
+- Criamos uma GPO para instalar e configurar o Zabbix Agent de forma automatizada nas estações de trabalho do domínio.
+- Implementamos o Auto-Registration Actions no Zabbix Server, organizando os hosts automaticamente no Host Group: Windows Desktop.
+- Garantimos que todas as novas máquinas ingressadas no domínio sejam automaticamente adicionadas ao monitoramento.
+
+💻 Aqui está o script usado no Logon Script da GPO:
+
+@echo off
+:: Define o IP do servidor Zabbix e o nome do host do computador
+set ZABBIX_SERVER=[IP_DO_ZABBIX_SERVER]
+set HOSTNAME=%COMPUTERNAME%
+set HOSTMETADATA=Windows
+
+:: Caminho do instalador no compartilhamento de rede
+set MSI_PATH=\\IP_DO_SEU_SERVIDOR_AD\Scripts\ZabbixAgent\zabbix_agent-7.2.3-windows-amd64-openssl.msi
+
+:: Instalar o agente silenciosamente
+msiexec /i "%MSI_PATH%" /qn /norestart SERVER=%ZABBIX_SERVER% HOSTNAME=%HOSTNAME%
+
+:: Aguarda a instalação ser concluída
+timeout /t 10 /nobreak >nul
+
+:: Caminho do arquivo de configuração do Zabbix Agent
+set CONFIG_PATH="C:\Program Files\Zabbix Agent\zabbix_agentd.conf"
+
+:: Remover linhas duplicadas do arquivo de configuração
+powershell -Command "(Get-Content %CONFIG_PATH% | Sort-Object -Unique) | Set-Content %CONFIG_PATH%"
+
+:: Remover possíveis múltiplas ocorrências da linha 'Server=' (mantendo apenas a última)
+powershell -Command "(Get-Content %CONFIG_PATH% | Where-Object {$_ -notmatch '^Server='}) + 'Server=%ZABBIX_SERVER%' | Set-Content %CONFIG_PATH%"
+
+:: Modificar o arquivo de configuração para incluir os parâmetros necessários (sem duplicidade)
+(
+ echo ServerActive=%ZABBIX_SERVER%
+ echo HostMetadata=%HOSTMETADATA%
+ echo ListenPort=10050
+ echo Hostname=%HOSTNAME%
+) >> %CONFIG_PATH%
+
+:: Reiniciar o serviço do Zabbix Agent para aplicar as mudanças
+net stop "Zabbix Agent" /y
+net start "Zabbix Agent"
+
+📊 Resultado:
+
+Agora, todas as estações de trabalho recebem o Zabbix Agent automaticamente e aparecem na Console Web do Zabbix Server sem nenhuma configuração manual. Mais eficiência, menos trabalho repetitivo e um monitoramento padronizado!
+
+Alguém já implementou algo parecido? Alguma dica ou melhoria? Vamos trocar ideias! 💡🔄
